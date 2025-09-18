@@ -7,10 +7,11 @@ import java.awt.event.ActionListener;
 
 public class RemoteDesktopApp {
     public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> {
-            ConnectFrame connectFrame = new ConnectFrame();
-            connectFrame.setVisible(true);
-        });
+//        SwingUtilities.invokeLater(() -> {
+//            ConnectFrame connectFrame = new ConnectFrame();
+//            connectFrame.setVisible(true);
+//        });
+        ConnectFrame1.open();
     }
 }
 
