@@ -1,4 +1,4 @@
-package UI;
+/*package UI;
 
 import javax.swing.*;
 import java.awt.*;
@@ -73,5 +73,5 @@ class ConnectFrame extends JFrame {
             }
         });
     }
-}
+}*/
 

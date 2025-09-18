@@ -2,14 +2,15 @@ package UI;
 
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.io.PrintWriter;
-import java.net.Socket;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.io.PrintWriter;
+import java.net.InetSocketAddress;
+import java.net.Socket;
 
 public class ConnectFrame1 extends JFrame {
     private JTextField ipField;
+    private JButton connectBtn;
 
     public ConnectFrame1() {
         super("Remote Desktop - Connect (LAN demo)");
@@ -17,7 +18,7 @@ public class ConnectFrame1 extends JFrame {
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(new GridLayout(1,2));
 
-        // left panel: show own info (optional)
+        // left panel (host info)
         JPanel left = new JPanel(new GridBagLayout());
         left.setBackground(new Color(200,200,255));
         GridBagConstraints gbc = new GridBagConstraints();
@@ -27,7 +28,7 @@ public class ConnectFrame1 extends JFrame {
         gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 2;
         left.add(new JLabel("Allow remote control (Host)"), gbc);
         gbc.gridy = 1; gbc.gridwidth = 1;
-        left.add(new JLabel("Your IP (shown by OS)"), gbc);
+        left.add(new JLabel("Your IP"), gbc);
         JTextField yourIp = new JTextField(20);
         yourIp.setEditable(false);
         try {
@@ -40,10 +41,9 @@ public class ConnectFrame1 extends JFrame {
         JTextField pwField = new JTextField("demo123");
         pwField.setEditable(false);
         gbc.gridx = 1; left.add(pwField, gbc);
-
         add(left);
 
-        // right panel: connect
+        // right panel (client connect)
         JPanel right = new JPanel(new GridBagLayout());
         right.setBackground(new Color(200,200,255));
         gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 2;
@@ -56,44 +56,63 @@ public class ConnectFrame1 extends JFrame {
 
         gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = 2;
         gbc.anchor = GridBagConstraints.CENTER;
-        JButton connectBtn = new JButton("Connect");
+        connectBtn = new JButton("Connect");
         right.add(connectBtn, gbc);
 
         add(right);
 
-        connectBtn.addActionListener((ActionEvent e) -> {
+        // Hành vi connect: thử connect với timeout, auth, rồi mở giao diện 2 nếu OK
+        connectBtn.addActionListener(ev -> {
             String ip = ipField.getText().trim();
             if (ip.isEmpty()) {
                 JOptionPane.showMessageDialog(this, "Nhập IP của host trong LAN");
                 return;
             }
-            // ask for password to authenticate to host
             String pw = JOptionPane.showInputDialog(this, "Nhập password của host:");
-            if (pw == null) return;
+            if (pw == null) return; // user hủy
 
-            // connect in background thread
+            // Disable nút + hiện cursor chờ
+            connectBtn.setEnabled(false);
+            Cursor oldCursor = getCursor();
+            setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+
+            // Kết nối trong background thread
             new Thread(() -> {
+                Socket socket = new Socket();
                 try {
-                    Socket s = new Socket(ip, 5000);
-                    PrintWriter w = new PrintWriter(s.getOutputStream(), true);
-                    BufferedReader r = new BufferedReader(new InputStreamReader(s.getInputStream()));
-                    w.println("AUTH " + pw);
-                    String resp = r.readLine();
+                    // Thử connect với timeout 3s
+                    socket.connect(new InetSocketAddress(ip, 5000), 3000);
+
+                    // Gửi AUTH và đọc phản hồi (không đóng socket nếu OK)
+                    PrintWriter writer = new PrintWriter(socket.getOutputStream(), true);
+                    BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+
+                    writer.println("AUTH " + pw);
+                    String resp = reader.readLine();
                     if ("OK".equals(resp)) {
+                        // Trên thành công: mở RemoteControlFrame với socket đang mở
                         SwingUtilities.invokeLater(() -> {
                             JOptionPane.showMessageDialog(this, "Xác thực thành công. Mở RemoteControlFrame...");
                             this.dispose();
-                            RemoteControlFrame1 rc = new RemoteControlFrame1(s);
+                            RemoteControlFrame1 rc = new RemoteControlFrame1(socket);
                             rc.setVisible(true);
                         });
                     } else {
-                        s.close();
+                        // Auth fail: đóng socket và báo lỗi
+                        try { socket.close(); } catch (Exception ignored) {}
                         SwingUtilities.invokeLater(() ->
-                                JOptionPane.showMessageDialog(this, "Xác thực thất bại"));
+                                JOptionPane.showMessageDialog(this, "Xác thực thất bại. Kiểm tra password."));
                     }
                 } catch (Exception ex) {
+                    try { socket.close(); } catch (Exception ignored) {}
+                    String msg = ex.getMessage() == null ? ex.toString() : ex.getMessage();
                     SwingUtilities.invokeLater(() ->
-                            JOptionPane.showMessageDialog(this, "Lỗi kết nối: " + ex.getMessage()));
+                            JOptionPane.showMessageDialog(this, "Không thể kết nối tới host: " + msg));
+                } finally {
+                    SwingUtilities.invokeLater(() -> {
+                        connectBtn.setEnabled(true);
+                        setCursor(oldCursor);
+                    });
                 }
             }).start();
         });
@@ -103,7 +122,7 @@ public class ConnectFrame1 extends JFrame {
 
     public static void open() {
         SwingUtilities.invokeLater(() -> {
-            ConnectFrame f = new ConnectFrame();
+            ConnectFrame1 f = new ConnectFrame1();
             f.setVisible(true);
         });
     }

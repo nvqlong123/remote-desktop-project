@@ -32,7 +32,6 @@ public class HostServer {
              PrintWriter pw = new PrintWriter(s.getOutputStream(), true);
              OutputStream out = s.getOutputStream()) {
 
-            // Expect "AUTH <password>"
             String authLine = br.readLine();
             System.out.println("Auth attempt: " + authLine);
             if (authLine == null || !authLine.startsWith("AUTH ")) {
