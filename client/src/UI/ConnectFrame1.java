@@ -7,10 +7,16 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.InetSocketAddress;
 import java.net.Socket;
-
+import java.time.LocalDateTime;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
+import java.io.IOException;
+import java.net.UnknownHostException;
+import shared.HostServer;
 public class ConnectFrame1 extends JFrame {
     private JTextField ipField;
     private JButton connectBtn;
+    private HostServer hostServer; // Tham chiếu để quản lý server
 
     public ConnectFrame1() {
         super("Remote Desktop - Connect (LAN demo)");
@@ -61,15 +67,29 @@ public class ConnectFrame1 extends JFrame {
 
         add(right);
 
+        // Tự động khởi động HostServer khi mở UI (đảm bảo server chỉ chạy khi UI mở)
+        String pw = pwField.getText().trim();
+        hostServer = new HostServer(5000, pw);
+        new Thread(() -> {
+            try {
+                System.out.println(LocalDateTime.now() + " - Khởi động HostServer trên port 5000 với password: " + pw);
+                hostServer.start();
+            } catch (Exception e) {
+                System.err.println(LocalDateTime.now() + " - Lỗi khởi động server: " + e.getMessage());
+                e.printStackTrace();
+            }
+        }).start();
+
         // Hành vi connect: thử connect với timeout, auth, rồi mở giao diện 2 nếu OK
+        // Client chỉ kết nối được khi server đang chạy (tức UI host đã mở)
         connectBtn.addActionListener(ev -> {
             String ip = ipField.getText().trim();
             if (ip.isEmpty()) {
                 JOptionPane.showMessageDialog(this, "Nhập IP của host trong LAN");
                 return;
             }
-            String pw = JOptionPane.showInputDialog(this, "Nhập password của host:");
-            if (pw == null) return; // user hủy
+            String pwInput = JOptionPane.showInputDialog(this, "Nhập password của host:");
+            if (pwInput == null) return; // user hủy
 
             // Disable nút + hiện cursor chờ
             connectBtn.setEnabled(false);
@@ -87,7 +107,7 @@ public class ConnectFrame1 extends JFrame {
                     PrintWriter writer = new PrintWriter(socket.getOutputStream(), true);
                     BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
 
-                    writer.println("AUTH " + pw);
+                    writer.println("AUTH " + pwInput);
                     String resp = reader.readLine();
                     if ("OK".equals(resp)) {
                         // Trên thành công: mở RemoteControlFrame với socket đang mở
@@ -115,6 +135,17 @@ public class ConnectFrame1 extends JFrame {
                     });
                 }
             }).start();
+        });
+
+        // Dừng server khi đóng frame (tùy chọn, để tránh server chạy ngầm)
+        addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent e) {
+                if (hostServer != null) {
+                    hostServer.stop();
+                    System.out.println(LocalDateTime.now() + " - Dừng HostServer khi đóng UI");
+                }
+            }
         });
 
         setLocationRelativeTo(null);

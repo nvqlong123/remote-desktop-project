@@ -1,3 +1,5 @@
+package Server;
+
 
 
 public class Main {
@@ -10,3 +12,4 @@ public class Main {
         server.start();
     }
 }
+
