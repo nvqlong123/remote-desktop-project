@@ -1,0 +1,9 @@
+[33m2d91f7d[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m HEAD@{2025-09-25 10:29:44 +0700}: reset: moving to 2d91f7d
+[33m083e0a4[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m, [m[1;32mbackup-main[m[33m)[m HEAD@{2025-09-25 10:27:41 +0700}: checkout: moving from main to main
+[33m083e0a4[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m, [m[1;32mbackup-main[m[33m)[m HEAD@{2025-09-25 10:16:03 +0700}: commit: v4
+[33mf840de8[m HEAD@{2025-09-25 10:03:35 +0700}: commit: v3
+[33m1c84bf2[m HEAD@{2025-09-25 08:13:20 +0700}: commit: v2
+[33m2d91f7d[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m HEAD@{2025-09-18 09:25:10 +0700}: commit: demo1
+[33m8323f6c[m HEAD@{2025-09-18 09:08:03 +0700}: commit: demo
+[33m0eb5c3a[m HEAD@{2025-09-18 08:44:21 +0700}: commit: Add UI frames and Main; initial client UI
+[33mddf1f49[m HEAD@{2025-08-21 03:24:28 +0700}: clone: from https://github.com/nvqlong123/remote-desktop-project.git
