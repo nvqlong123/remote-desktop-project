@@ -2,7 +2,7 @@
 
 public class Main {
     public static void main(String[] args) throws Exception {
-        int port = 5000;
+        int port = 5001;
         String password = "demo123"; // mặc định password
         if (args.length >= 1) password = args[0];
         HostServer server = new HostServer(port, password);
