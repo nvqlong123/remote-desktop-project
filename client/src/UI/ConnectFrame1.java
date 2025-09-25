@@ -1,3 +1,4 @@
+// client/src/main/java/ui/ConnectFrame1.java - Sửa: Không auto-start server, chặn connect nếu server không chạy
 package UI;
 
 import javax.swing.*;
@@ -10,13 +11,10 @@ import java.net.Socket;
 import java.time.LocalDateTime;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
-import java.io.IOException;
-import java.net.UnknownHostException;
-import shared.HostServer;
+
 public class ConnectFrame1 extends JFrame {
     private JTextField ipField;
     private JButton connectBtn;
-    private HostServer hostServer; // Tham chiếu để quản lý server
 
     public ConnectFrame1() {
         super("Remote Desktop - Connect (LAN demo)");
@@ -24,7 +22,7 @@ public class ConnectFrame1 extends JFrame {
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(new GridLayout(1,2));
 
-        // left panel (host info)
+        // left panel (host info) - Giữ để hiển thị IP local, nhưng không start server
         JPanel left = new JPanel(new GridBagLayout());
         left.setBackground(new Color(200,200,255));
         GridBagConstraints gbc = new GridBagConstraints();
@@ -32,7 +30,7 @@ public class ConnectFrame1 extends JFrame {
         gbc.anchor = GridBagConstraints.WEST;
 
         gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 2;
-        left.add(new JLabel("Allow remote control (Host)"), gbc);
+        left.add(new JLabel("Allow remote control (Host) - Chạy server riêng"), gbc);
         gbc.gridy = 1; gbc.gridwidth = 1;
         left.add(new JLabel("Your IP"), gbc);
         JTextField yourIp = new JTextField(20);
@@ -53,7 +51,7 @@ public class ConnectFrame1 extends JFrame {
         JPanel right = new JPanel(new GridBagLayout());
         right.setBackground(new Color(200,200,255));
         gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 2;
-        right.add(new JLabel("Control remote device (Client)"), gbc);
+        right.add(new JLabel("Control remote device (Client) - Kết nối khi server chạy"), gbc);
 
         gbc.gridy = 1; gbc.gridwidth = 1;
         right.add(new JLabel("IP Address (Host)"), gbc);
@@ -67,21 +65,8 @@ public class ConnectFrame1 extends JFrame {
 
         add(right);
 
-        // Tự động khởi động HostServer khi mở UI (đảm bảo server chỉ chạy khi UI mở)
-        String pw = pwField.getText().trim();
-        hostServer = new HostServer(5000, pw);
-        new Thread(() -> {
-            try {
-                System.out.println(LocalDateTime.now() + " - Khởi động HostServer trên port 5000 với password: " + pw);
-                hostServer.start();
-            } catch (Exception e) {
-                System.err.println(LocalDateTime.now() + " - Lỗi khởi động server: " + e.getMessage());
-                e.printStackTrace();
-            }
-        }).start();
-
         // Hành vi connect: thử connect với timeout, auth, rồi mở giao diện 2 nếu OK
-        // Client chỉ kết nối được khi server đang chạy (tức UI host đã mở)
+        // Chặn nếu server không chạy (connect fail -> thông báo rõ ràng)
         connectBtn.addActionListener(ev -> {
             String ip = ipField.getText().trim();
             if (ip.isEmpty()) {
@@ -100,7 +85,7 @@ public class ConnectFrame1 extends JFrame {
             new Thread(() -> {
                 Socket socket = new Socket();
                 try {
-                    // Thử connect với timeout 3s
+                    // Thử connect với timeout 3s - Nếu fail, chặn và báo server chưa chạy
                     socket.connect(new InetSocketAddress(ip, 5000), 3000);
 
                     // Gửi AUTH và đọc phản hồi (không đóng socket nếu OK)
@@ -110,7 +95,7 @@ public class ConnectFrame1 extends JFrame {
                     writer.println("AUTH " + pwInput);
                     String resp = reader.readLine();
                     if ("OK".equals(resp)) {
-                        // Trên thành công: mở RemoteControlFrame với socket đang mở
+                        // Thành công: mở RemoteControlFrame với socket đang mở
                         SwingUtilities.invokeLater(() -> {
                             JOptionPane.showMessageDialog(this, "Xác thực thành công. Mở RemoteControlFrame...");
                             this.dispose();
@@ -123,6 +108,11 @@ public class ConnectFrame1 extends JFrame {
                         SwingUtilities.invokeLater(() ->
                                 JOptionPane.showMessageDialog(this, "Xác thực thất bại. Kiểm tra password."));
                     }
+                } catch (java.net.ConnectException ex) {
+                    // Chặn cụ thể: Server không chạy
+                    try { socket.close(); } catch (Exception ignored) {}
+                    SwingUtilities.invokeLater(() ->
+                            JOptionPane.showMessageDialog(this, "Không thể kết nối: Server chưa được khởi động trên máy host.\nVui lòng chạy HostServer trước (port 5000)."));
                 } catch (Exception ex) {
                     try { socket.close(); } catch (Exception ignored) {}
                     String msg = ex.getMessage() == null ? ex.toString() : ex.getMessage();
@@ -135,17 +125,6 @@ public class ConnectFrame1 extends JFrame {
                     });
                 }
             }).start();
-        });
-
-        // Dừng server khi đóng frame (tùy chọn, để tránh server chạy ngầm)
-        addWindowListener(new WindowAdapter() {
-            @Override
-            public void windowClosing(WindowEvent e) {
-                if (hostServer != null) {
-                    hostServer.stop();
-                    System.out.println(LocalDateTime.now() + " - Dừng HostServer khi đóng UI");
-                }
-            }
         });
 
         setLocationRelativeTo(null);

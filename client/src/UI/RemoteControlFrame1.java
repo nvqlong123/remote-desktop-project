@@ -1,3 +1,4 @@
+// client/src/main/java/ui/RemoteControlFrame1.java (giữ nguyên, không thay đổi)
 package UI;
 
 import javax.imageio.ImageIO;

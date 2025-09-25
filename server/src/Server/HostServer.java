@@ -1,4 +1,7 @@
 package Server;
+// server/src/main/java/server/HostServer.java - Thêm main để chạy standalone
+
+
 import javax.imageio.ImageIO;
 import java.awt.*;
 import java.awt.image.BufferedImage;
@@ -19,7 +22,8 @@ public class HostServer {
 
     public void start() throws Exception {
         ServerSocket ss = new ServerSocket(port);
-        System.out.println(LocalDateTime.now() + " - HostServer đang lắng nghe trên port " + port);
+        System.out.println(LocalDateTime.now() + " - HostServer đang lắng nghe trên port " + port + " (password: " + password + ")");
+        System.out.println(LocalDateTime.now() + " - Chạy server riêng: java server.HostServer 5000 demo123");
         while (running) {
             Socket client = ss.accept();
             String clientInfo = client.getInetAddress().getHostAddress() + ":" + client.getPort();
@@ -27,7 +31,7 @@ public class HostServer {
             // Kiểm tra chặt: Log chi tiết IP và thời gian, chỉ chấp nhận nếu auth OK
             new Thread(() -> handleClient(client)).start();
         }
-        // ss.close(); // never reached in this demo
+        ss.close();
     }
 
     private void handleClient(Socket s) {
@@ -85,5 +89,21 @@ public class HostServer {
     public void stop() {
         running = false;
         System.out.println(LocalDateTime.now() + " - Dừng HostServer");
+    }
+
+    // Main để chạy standalone (không cần UI)
+    public static void main(String[] args) {
+        int port = 5000;
+        String password = "demo123";
+        if (args.length >= 1) port = Integer.parseInt(args[0]);
+        if (args.length >= 2) password = args[1];
+
+        HostServer server = new HostServer(port, password);
+        try {
+            server.start();
+        } catch (Exception e) {
+            System.err.println(LocalDateTime.now() + " - Lỗi khởi động server: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 }
