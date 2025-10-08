@@ -1,6 +1,4 @@
 package Server;
-// server/src/main/java/server/HostServer.java - Thêm main để chạy standalone
-
 
 import javax.imageio.ImageIO;
 import java.awt.*;
@@ -9,101 +7,121 @@ import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class HostServer {
     private final int port;
     private final String password;
-    private volatile boolean running = true;
+    private volatile boolean running = false;
+    private ServerSocket serverSocket;
+    private final ExecutorService clientHandlerPool = Executors.newCachedThreadPool();
+
+    private static final DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     public HostServer(int port, String password) {
         this.port = port;
         this.password = password;
     }
 
-    public void start() throws Exception {
-        ServerSocket ss = new ServerSocket(port);
-        System.out.println(LocalDateTime.now() + " - HostServer đang lắng nghe trên port " + port + " (password: " + password + ")");
-        System.out.println(LocalDateTime.now() + " - Chạy server riêng: java server.HostServer 5000 demo123");
-        while (running) {
-            Socket client = ss.accept();
-            String clientInfo = client.getInetAddress().getHostAddress() + ":" + client.getPort();
-            System.out.println(LocalDateTime.now() + " - Thiết bị kết nối: " + clientInfo + " (Kiểm tra xác thực...)");
-            // Kiểm tra chặt: Log chi tiết IP và thời gian, chỉ chấp nhận nếu auth OK
-            new Thread(() -> handleClient(client)).start();
-        }
-        ss.close();
+    public void start() throws IOException {
+        serverSocket = new ServerSocket(port);
+        running = true;
+        log("HostServer is listening on port " + port);
+
+        // Vòng lặp chính để chấp nhận các kết nối mới
+        new Thread(() -> {
+            while (running) {
+                try {
+                    Socket clientSocket = serverSocket.accept();
+                    log("New connection from: " + clientSocket.getRemoteSocketAddress());
+                    // Giao cho một thread khác xử lý client này
+                    clientHandlerPool.submit(() -> handleClient(clientSocket));
+                } catch (IOException e) {
+                    if (running) {
+                        log("Error accepting client connection: " + e.getMessage());
+                    } else {
+                        log("Server socket closed.");
+                    }
+                }
+            }
+        }).start();
     }
 
-    private void handleClient(Socket s) {
-        String clientInfo = s.getInetAddress().getHostAddress() + ":" + s.getPort();
-        try (BufferedReader br = new BufferedReader(new InputStreamReader(s.getInputStream()));
-             PrintWriter pw = new PrintWriter(s.getOutputStream(), true);
-             OutputStream out = s.getOutputStream()) {
+    private void handleClient(Socket socket) {
+        String clientInfo = socket.getRemoteSocketAddress().toString();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+             PrintWriter writer = new PrintWriter(socket.getOutputStream(), true);
+             DataOutputStream dos = new DataOutputStream(socket.getOutputStream())) {
 
-            String authLine = br.readLine();
-            System.out.println(LocalDateTime.now() + " - Yêu cầu xác thực từ " + clientInfo + ": " + authLine);
-            if (authLine == null || !authLine.startsWith("AUTH ")) {
-                System.out.println(LocalDateTime.now() + " - Lỗi định dạng xác thực từ " + clientInfo + " -> Đóng kết nối");
-                pw.println("ERR");
-                s.close();
-                return;
+            // Bước 1: Xác thực
+            String authLine = reader.readLine();
+            log("Authenticating client " + clientInfo + "...");
+            if (authLine != null && authLine.startsWith("AUTH ") && authLine.substring(5).equals(password)) {
+                writer.println("OK");
+                log("Authentication successful for " + clientInfo);
+
+                // Bước 2: Bắt đầu stream màn hình
+                streamScreen(dos, socket);
+            } else {
+                writer.println("ERR");
+                log("Authentication failed for " + clientInfo);
             }
-            String got = authLine.substring(5).trim();
-            if (!got.equals(password)) {
-                System.out.println(LocalDateTime.now() + " - Xác thực thất bại từ " + clientInfo + " (password sai) -> Đóng kết nối");
-                pw.println("ERR");
-                s.close();
-                return;
+        } catch (Exception e) {
+            log("Connection with " + clientInfo + " ended: " + e.getMessage());
+        } finally {
+            try {
+                socket.close();
+            } catch (IOException e) {
+                // Ignore
             }
-            pw.println("OK");
-            System.out.println(LocalDateTime.now() + " - Xác thực thành công từ " + clientInfo + ". Bắt đầu stream màn hình (FPS ~2.5)");
+            log("Closed connection with " + clientInfo);
+        }
+    }
 
-            // Start streaming screenshots as JPEG frames
-            DataOutputStream dos = new DataOutputStream(out);
-            Robot robot = new Robot();
-            Rectangle screenRect = new Rectangle(Toolkit.getDefaultToolkit().getScreenSize());
+    private void streamScreen(DataOutputStream dos, Socket socket) throws AWTException, IOException {
+        Robot robot = new Robot();
+        Rectangle screenRect = new Rectangle(Toolkit.getDefaultToolkit().getScreenSize());
 
-            while (!s.isClosed() && running) {
-                BufferedImage img = robot.createScreenCapture(screenRect);
+        while (running && !socket.isClosed()) {
+            try {
+                BufferedImage screenCapture = robot.createScreenCapture(screenRect);
                 ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                // write JPEG to baos
-                ImageIO.write(img, "jpg", baos);
-                byte[] data = baos.toByteArray();
+                ImageIO.write(screenCapture, "jpg", baos);
+                byte[] imageData = baos.toByteArray();
 
-                // protocol: [int length][bytes]
-                dos.writeInt(data.length);
-                dos.write(data);
+                // Gửi dữ liệu theo giao thức: [độ dài (int)][dữ liệu ảnh (byte[])]
+                dos.writeInt(imageData.length);
+                dos.write(imageData);
                 dos.flush();
 
-                // throttle FPS
-                try { Thread.sleep(400); } catch (InterruptedException ie) { /* ignore */ }
+                // Điều chỉnh FPS để giảm tải CPU và băng thông
+                Thread.sleep(250); // ~4 FPS
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            } catch (IOException e) {
+                // Thường xảy ra khi client ngắt kết nối
+                break;
             }
-        } catch (Exception ex) {
-            System.out.println(LocalDateTime.now() + " - Kết nối từ " + clientInfo + " kết thúc bất ngờ: " + ex.getMessage());
-        } finally {
-            try { s.close(); } catch (Exception e) {}
-            System.out.println(LocalDateTime.now() + " - Đóng kết nối với " + clientInfo);
         }
     }
 
     public void stop() {
         running = false;
-        System.out.println(LocalDateTime.now() + " - Dừng HostServer");
+        try {
+            if (serverSocket != null && !serverSocket.isClosed()) {
+                serverSocket.close();
+            }
+        } catch (IOException e) {
+            log("Error closing server socket: " + e.getMessage());
+        }
+        clientHandlerPool.shutdownNow(); // Ngắt tất cả các thread xử lý client
+        log("HostServer stopped.");
     }
 
-    // Main để chạy standalone (không cần UI)
-    public static void main(String[] args) {
-        int port = 5000;
-        String password = "demo123";
-        if (args.length >= 1) port = Integer.parseInt(args[0]);
-        if (args.length >= 2) password = args[1];
-
-        HostServer server = new HostServer(port, password);
-        try {
-            server.start();
-        } catch (Exception e) {
-            System.err.println(LocalDateTime.now() + " - Lỗi khởi động server: " + e.getMessage());
-            e.printStackTrace();
-        }
+    private void log(String message) {
+        System.out.println(LocalDateTime.now().format(dtf) + " - " + message);
     }
 }
