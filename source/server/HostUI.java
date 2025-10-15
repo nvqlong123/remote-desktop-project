@@ -1,8 +1,10 @@
-package Server;
+package server;
 
 import javax.swing.*;
 import java.awt.*;
-import java.net.*;
+import java.net.Inet4Address;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Enumeration;
@@ -13,6 +15,7 @@ public class HostUI extends JFrame {
     private JButton stopButton;
     private JTextArea logArea;
     private HostServer hostServer;
+    private final JTextAreaLogAppender logAppender;
 
     public HostUI() {
         super("Remote Desktop - Host");
@@ -36,7 +39,6 @@ public class HostUI extends JFrame {
         gbc.gridx = 0; gbc.gridy = 1;
         infoPanel.add(new JLabel("Password:"), gbc);
         JTextField pwField = new JTextField("demo123", 15);
-        pwField.setEditable(false);
         gbc.gridx = 1; infoPanel.add(pwField, gbc);
 
         // Panel điều khiển
@@ -50,18 +52,16 @@ public class HostUI extends JFrame {
         // Vùng log
         logArea = new JTextArea("Server is stopped.\n");
         logArea.setEditable(false);
+        logAppender = new JTextAreaLogAppender(logArea);
         JScrollPane scrollPane = new JScrollPane(logArea);
 
-        // Thêm các panel vào frame
         add(infoPanel, BorderLayout.NORTH);
         add(scrollPane, BorderLayout.CENTER);
         add(controlPanel, BorderLayout.SOUTH);
 
-        // Xử lý sự kiện
         startButton.addActionListener(e -> startServer(5000, pwField.getText()));
         stopButton.addActionListener(e -> stopServer());
 
-        // Đảm bảo server dừng khi đóng cửa sổ
         addWindowListener(new java.awt.event.WindowAdapter() {
             @Override
             public void windowClosing(java.awt.event.WindowEvent windowEvent) {
@@ -75,8 +75,12 @@ public class HostUI extends JFrame {
     }
 
     private void startServer(int port, String password) {
+        if (password.trim().isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Password cannot be empty.", "Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
         log("Starting server...");
-        hostServer = new HostServer(port, password);
+        hostServer = new HostServer(port, password, logAppender);
         new Thread(() -> {
             try {
                 hostServer.start();
@@ -104,11 +108,9 @@ public class HostUI extends JFrame {
     }
 
     private void log(String message) {
-        logArea.append(message + "\n");
-        logArea.setCaretPosition(logArea.getDocument().getLength());
+        logAppender.log(message);
     }
 
-    // Hàm tìm IP, giữ nguyên từ code gốc vì nó hoạt động tốt
     private String findPreferredIPv4() {
         try {
             List<InetAddress> candidates = new ArrayList<>();
@@ -121,7 +123,7 @@ public class HostUI extends JFrame {
                 for (InetAddress addr : Collections.list(ni.getInetAddresses())) {
                     if (addr instanceof Inet4Address && !addr.isLoopbackAddress()) {
                         if (name.contains("wi-fi") || name.contains("wireless") || name.contains("ethernet")) {
-                            return addr.getHostAddress(); // Ưu tiên trả về ngay
+                            return addr.getHostAddress();
                         }
                         candidates.add(addr);
                     }
@@ -138,5 +140,22 @@ public class HostUI extends JFrame {
 
     public static void open() {
         SwingUtilities.invokeLater(() -> new HostUI().setVisible(true));
+    }
+
+    // Lớp nội bộ để giúp HostServer ghi log vào JTextArea
+    public interface LogAppender {
+        void log(String message);
+    }
+
+    private static class JTextAreaLogAppender implements LogAppender {
+        private final JTextArea textArea;
+        JTextAreaLogAppender(JTextArea textArea) { this.textArea = textArea; }
+        @Override
+        public void log(String message) {
+            SwingUtilities.invokeLater(() -> {
+                textArea.append(message + "\n");
+                textArea.setCaretPosition(textArea.getDocument().getLength());
+            });
+        }
     }
 }
